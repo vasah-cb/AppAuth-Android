@@ -21,6 +21,8 @@ import static net.openid.appauth.Preconditions.checkNotNull;
 import static net.openid.appauth.Preconditions.checkNullOrNotEmpty;
 
 import android.text.TextUtils;
+import android.util.Pair;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -31,6 +33,7 @@ import org.json.JSONObject;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -78,7 +81,13 @@ public class TokenResponse {
     static final String KEY_SCOPE = "scope";
 
     @VisibleForTesting
+    static final String KEY_DPOP_NONCE = "dpop_nonce";
+
+    @VisibleForTesting
     static final String KEY_ADDITIONAL_PARAMETERS = "additionalParameters";
+
+    @VisibleForTesting
+    static final String HEADER_DPOP_NONCE = "dpop-nonce";
 
     private static final Set<String> BUILT_IN_PARAMS = new HashSet<>(Arrays.asList(
             KEY_TOKEN_TYPE,
@@ -154,6 +163,15 @@ public class TokenResponse {
     public final String scope;
 
     /**
+     * The DPoP nonce value, if provided.
+     *
+     * @see "OAuth 2.0 Demonstration of Proof-of-Possession at the Application Layer (DPoP)
+     * <https://datatracker.ietf.org/doc/html/draft-ietf-oauth-dpop-04#section-3.3.1>"
+     */
+    @Nullable
+    public final String dpopNonce;
+
+    /**
      * Additional, non-standard parameters in the response.
      */
     @NonNull
@@ -184,6 +202,9 @@ public class TokenResponse {
         @Nullable
         private String mScope;
 
+        @Nullable
+        private String mDpopNonce;
+
         @NonNull
         private Map<String, String> mAdditionalParameters;
 
@@ -193,6 +214,18 @@ public class TokenResponse {
         public Builder(@NonNull TokenRequest request) {
             setRequest(request);
             mAdditionalParameters = Collections.emptyMap();
+        }
+
+        /**
+         * Extracts token response fields from an HTTP response represented as a pair of
+         * headers and body string.
+         *
+         * @throws JSONException if the JSON is malformed or has incorrect value types for fields.
+         */
+        @NonNull
+        public Builder fromResponse(@NonNull Pair<Map<String, List<String>>, JSONObject> httpResponse) throws JSONException {
+            return fromResponseJson(httpResponse.second)
+                .fromResponseHeaders(httpResponse.first);
         }
 
         /**
@@ -223,6 +256,19 @@ public class TokenResponse {
             setIdToken(JsonUtil.getStringIfDefined(json, KEY_ID_TOKEN));
             setScope(JsonUtil.getStringIfDefined(json, KEY_SCOPE));
             setAdditionalParameters(extractAdditionalParams(json, BUILT_IN_PARAMS));
+
+            return this;
+        }
+
+        /**
+         * Extracts token response fields from HTTP response headers.
+         */
+        @NonNull
+        public Builder fromResponseHeaders(@NonNull Map<String, List<String>> headers) {
+            List<String> dpopNonceValues = headers.get(HEADER_DPOP_NONCE);
+            if (dpopNonceValues != null && !dpopNonceValues.isEmpty()) {
+                setDpopNonce(dpopNonceValues.get(0));
+            }
 
             return this;
         }
@@ -366,6 +412,18 @@ public class TokenResponse {
         }
 
         /**
+         * Specifies the DPoP nonce value. If not null, the value must be non-empty.
+         *
+         * @see "OAuth 2.0 Demonstration of Proof-of-Possession at the Application Layer (DPoP)
+         * <https://datatracker.ietf.org/doc/html/draft-ietf-oauth-dpop-04#section-3.3.1>"
+         */
+        @NonNull
+        public Builder setDpopNonce(@Nullable String dpopNonce) {
+            mDpopNonce = dpopNonce;
+            return this;
+        }
+
+        /**
          * Specifies the additional, non-standard parameters received as part of the response.
          */
         @NonNull
@@ -386,6 +444,7 @@ public class TokenResponse {
                     mIdToken,
                     mRefreshToken,
                     mScope,
+                    mDpopNonce,
                     mAdditionalParameters);
         }
     }
@@ -398,6 +457,7 @@ public class TokenResponse {
             @Nullable String idToken,
             @Nullable String refreshToken,
             @Nullable String scope,
+            @Nullable String dpopNonce,
             @NonNull Map<String, String> additionalParameters) {
         this.request = request;
         this.tokenType = tokenType;
@@ -406,6 +466,7 @@ public class TokenResponse {
         this.idToken = idToken;
         this.refreshToken = refreshToken;
         this.scope = scope;
+        this.dpopNonce = dpopNonce;
         this.additionalParameters = additionalParameters;
     }
 
@@ -432,6 +493,7 @@ public class TokenResponse {
         JsonUtil.putIfNotNull(json, KEY_ID_TOKEN, idToken);
         JsonUtil.putIfNotNull(json, KEY_REFRESH_TOKEN, refreshToken);
         JsonUtil.putIfNotNull(json, KEY_SCOPE, scope);
+        JsonUtil.putIfNotNull(json, KEY_DPOP_NONCE, dpopNonce);
         JsonUtil.put(json, KEY_ADDITIONAL_PARAMETERS,
                 JsonUtil.mapToJsonObject(additionalParameters));
         return json;
@@ -466,6 +528,7 @@ public class TokenResponse {
                 JsonUtil.getStringIfDefined(json, KEY_ID_TOKEN),
                 JsonUtil.getStringIfDefined(json, KEY_REFRESH_TOKEN),
                 JsonUtil.getStringIfDefined(json, KEY_SCOPE),
+                JsonUtil.getStringIfDefined(json, KEY_DPOP_NONCE),
                 JsonUtil.getStringMap(json, KEY_ADDITIONAL_PARAMETERS));
     }
 

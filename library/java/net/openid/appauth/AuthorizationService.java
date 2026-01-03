@@ -27,6 +27,8 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.text.TextUtils;
+import android.util.Pair;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -50,6 +52,7 @@ import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URLConnection;
+import java.util.List;
 import java.util.Map;
 
 
@@ -577,7 +580,7 @@ public class AuthorizationService {
     }
 
     private static class TokenRequestTask
-            extends AsyncTask<Void, Void, JSONObject> {
+            extends AsyncTask<Void, Void, Pair<Map<String, List<String>>, JSONObject>> {
 
         private TokenRequest mRequest;
         private ClientAuthentication mClientAuthentication;
@@ -603,7 +606,7 @@ public class AuthorizationService {
         }
 
         @Override
-        protected JSONObject doInBackground(Void... voids) {
+        protected Pair<Map<String, List<String>>, JSONObject> doInBackground(Void... voids) {
             InputStream is = null;
             try {
                 HttpURLConnection conn = mConnectionBuilder.openConnection(
@@ -642,7 +645,8 @@ public class AuthorizationService {
                     is = conn.getErrorStream();
                 }
                 String response = Utils.readInputStream(is);
-                return new JSONObject(response);
+
+                return new Pair<>(conn.getHeaderFields(), new JSONObject(response));
             } catch (IOException ex) {
                 Logger.debugWithStack(ex, "Failed to complete exchange request");
                 mException = AuthorizationException.fromTemplate(
@@ -658,11 +662,13 @@ public class AuthorizationService {
         }
 
         @Override
-        protected void onPostExecute(JSONObject json) {
+        protected void onPostExecute(Pair<Map<String, List<String>>, JSONObject> result) {
             if (mException != null) {
                 mCallback.onTokenRequestCompleted(null, mException);
                 return;
             }
+
+            JSONObject json = result.second;
 
             if (json.has(AuthorizationException.PARAM_ERROR)) {
                 AuthorizationException ex;
@@ -685,7 +691,7 @@ public class AuthorizationService {
 
             TokenResponse response;
             try {
-                response = new TokenResponse.Builder(mRequest).fromResponseJson(json).build();
+                response = new TokenResponse.Builder(mRequest).fromResponse(result).build();
             } catch (JSONException jsonEx) {
                 mCallback.onTokenRequestCompleted(null,
                         AuthorizationException.fromTemplate(
