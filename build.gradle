@@ -28,7 +28,7 @@ project.ext.versionName = '0.12.0'
 project.ext.versionDate = new Date()
 
 project.ext {
-    minSdkVersion = 16
+    minSdkVersion = 21
     compileSdkVersion = 36
 
     googleVersions = [
