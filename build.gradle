@@ -24,7 +24,7 @@ subprojects {
 ext.verifyKeystore()
 
 project.ext.versionNum = 1
-project.ext.versionName = '0.12.0'
+project.ext.versionName = '0.13.1'
 project.ext.versionDate = new Date()
 
 project.ext {
